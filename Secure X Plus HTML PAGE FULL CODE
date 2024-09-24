@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>SecureCryptoX Plus</title>
+    <style>
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            background-color: #f4f4f4;
+            border-radius: 5px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .flex {
+            display: flex;
+            align-items: center;
+        }
+
+        textarea,
+        input,
+        button {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+
+        .flex textarea,
+        .flex input {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+
+        #errorMessage {
+            color: red;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div>
+        <textarea id="inputText" placeholder="Entrez le texte ici..."></textarea>
+        <button onclick="copyToClipboard('inputText')">Copier le texte à chiffrer</button>
+    </div>
+    <div>
+        <input type="text" id="keyInput" placeholder="Clé" />
+        <button id="generateKeyButton">Générer une clé</button>
+        <button onclick="copyToClipboard('keyInput')">Copier la clé</button>
+    </div>
+    <div>
+        <input type="text" id="fingerprintInput" placeholder="Empreinte" />
+        <button id="generateFingerprintButton">Générer une empreinte</button>
+        <button onclick="copyToClipboard('fingerprintInput')">Copier l'empreinte</button>
+    </div>
+    <div>
+        <button id="encryptButton">Crypter</button>
+        <button id="decryptButton">Décrypter</button>
+    </div>
+    <div>
+        <textarea id="outputText" placeholder="Texte crypté..."></textarea>
+        <button onclick="copyToClipboard('outputText')">Copier le texte crypté</button>
+    </div>
+    <div>
+        <textarea id="decryptedText" placeholder="Texte décrypté..."></textarea>
+        <button onclick="copyToClipboard('decryptedText')">Copier le texte décrypté</button>
+    </div>
+    <div>
+        <span id="errorMessage" style="color: red;"></span>
+    </div>
+    <button id="clearButton">Effacer tout</button>
+
+    <script>
+        const inputText = document.getElementById('inputText');
+        const keyInput = document.getElementById('keyInput');
+        const fingerprintInput = document.getElementById('fingerprintInput');
+        const outputText = document.getElementById('outputText');
+        const decryptedText = document.getElementById('decryptedText');
+        const errorMessage = document.getElementById('errorMessage');
+        const FIXED_IV = new TextEncoder().encode('FixedIVForEncryption123'); 
+
+        document.getElementById('generateKeyButton').addEventListener('click', () => {
+            const array = new Uint32Array(5);
+            window.crypto.getRandomValues(array);
+            keyInput.value = Array.from(array).join('-');
+        });
+
+        document.getElementById('generateFingerprintButton').addEventListener('click', async () => {
+            const array = new Uint8Array(32);
+            window.crypto.getRandomValues(array);
+            fingerprintInput.value = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+        });
+
+        document.getElementById('encryptButton').addEventListener('click', async () => {
+            try {
+                const encrypted = await encryptData(inputText.value, keyInput.value + fingerprintInput.value);
+                outputText.value = encrypted;
+                decryptedText.value = '';
+                errorMessage.textContent = '';
+            } catch (error) {
+                errorMessage.textContent = 'Erreur lors du cryptage.';
+            }
+        });
+
+        document.getElementById('decryptButton').addEventListener('click', async () => {
+            try {
+                const decrypted = await decryptData(outputText.value, keyInput.value + fingerprintInput.value);
+                decryptedText.value = decrypted;
+                errorMessage.textContent = '';
+            } catch (error) {
+                errorMessage.textContent = 'Erreur lors du décryptage. Vérifiez la clé et l\'empreinte.';
+            }
+        });
+
+        document.getElementById('clearButton').addEventListener('click', () => {
+            inputText.value = '';
+            keyInput.value = '';
+            fingerprintInput.value = '';
+            outputText.value = '';
+            decryptedText.value = '';
+            errorMessage.textContent = '';
+        });
+
+        function copyToClipboard(elementId) {
+            const copyText = document.getElementById(elementId);
+            copyText.select();
+            document.execCommand('copy');
+        }
+
+        async function encryptData(plainText, passphrase) {
+            const salt = new TextEncoder().encode(passphrase);
+            const key = await crypto.subtle.importKey('raw', salt, { name: 'PBKDF2' }, false, ['deriveKey']);
+            const derivedKey = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 1000, hash: 'SHA-256' }, key, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+            const encoded = new TextEncoder().encode(plainText);
+            const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: FIXED_IV }, derivedKey, encoded);
+            return btoa(Array.from(new Uint8Array(encrypted)).map(byte => String.fromCharCode(byte)).join(''));
+        }
+
+        async function decryptData(encryptedText, passphrase) {
+            const salt = new TextEncoder().encode(passphrase);
+            const key = await crypto.subtle.importKey('raw', salt, { name: 'PBKDF2' }, false, ['deriveKey']);
+            const derivedKey = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 1000, hash: 'SHA-256' }, key, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+            const encryptedBytes = new Uint8Array(atob(encryptedText).split('').map(char => char.charCodeAt(0)));
+            const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: FIXED_IV }, derivedKey, encryptedBytes);
+            return new TextDecoder().decode(decrypted);
+        }
+    </script>
+</body>
+
+</html>
