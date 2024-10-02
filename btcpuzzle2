@@ -1,0 +1,65 @@
+# -*- coding: utf-8 -*-
+import hashlib
+import base58
+from ecdsa import SigningKey, SECP256k1
+
+# Adresse publique Bitcoin à rechercher
+target_address = "1BY8GQbnueYofwSuFAT3USAhGjPrkxDdW9"  # À modifier pour d'autres recherches
+
+# Plage de recherche : à modifier en fonction de la plage du puzzle
+start_range = int("4000000000000000", 16)
+end_range = int("7ffffffffffffffff", 16)
+
+# Générer l'adresse Bitcoin à partir de la clé publique
+def public_key_to_address(public_key: bytes) -> str:
+    # Hashage SHA-256 de la clé publique
+    sha256_hash = hashlib.sha256(public_key).digest()
+    # Hashage RIPEMD-160 de l'empreinte SHA-256
+    ripemd160 = hashlib.new('ripemd160')
+    ripemd160.update(sha256_hash)
+    hashed_public_key = ripemd160.digest()
+
+    # Ajouter le préfixe (0x00 pour Bitcoin mainnet)
+    prefix_and_pubkey = b'\x00' + hashed_public_key
+    # Hash SHA-256 double
+    checksum_full = hashlib.sha256(hashlib.sha256(prefix_and_pubkey).digest()).digest()
+    checksum = checksum_full[:4]
+
+    # Adresse Bitcoin finale
+    binary_address = prefix_and_pubkey + checksum
+    address = base58.b58encode(binary_address).decode('utf-8')
+    return address
+
+# Convertir la clé privée en format WIF (Wallet Import Format)
+def private_key_to_wif(private_key: int) -> str:
+    private_key_bytes = private_key.to_bytes(32, 'big')
+    extended_key = b'\x80' + private_key_bytes  # Préfixe pour Bitcoin mainnet
+    sha256_1 = hashlib.sha256(extended_key).digest()
+    sha256_2 = hashlib.sha256(sha256_1).digest()
+    wif_key = extended_key + sha256_2[:4]  # Ajouter le checksum
+    return base58.b58encode(wif_key).decode('utf-8')
+
+# Rechercher l'adresse cible dans la plage séquentiellement
+def search_for_address_sequential():
+    for private_key in range(start_range, end_range + 1):
+        # Générer la clé publique à partir de la clé privée
+        signing_key = SigningKey.from_secret_exponent(private_key, curve=SECP256k1)
+        public_key = signing_key.get_verifying_key().to_string()
+
+        # Générer l'adresse Bitcoin à partir de la clé publique
+        address = public_key_to_address(public_key)
+
+        # Comparer l'adresse générée avec l'adresse cible
+        if address == target_address:
+            # Si l'adresse est trouvée, afficher et enregistrer les résultats
+            wif_private_key = private_key_to_wif(private_key)
+            result = f"Adresse trouvée : {address}\nClé privée WIF : {wif_private_key}\nClé privée : {private_key}\n"
+            print(result)
+
+            # Enregistrer dans un fichier texte
+            with open("resultat_bitcoin_puzzle.txt", "w") as f:
+                f.write(result)
+            break
+
+# Lancer la recherche
+search_for_address_sequential()
